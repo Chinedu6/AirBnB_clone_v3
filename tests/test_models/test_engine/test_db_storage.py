@@ -1,87 +1,73 @@
-#!/usr/bin/python3
-"""test for file storage"""
-
 import unittest
-import pep8
-import json
-import os
+import os.path
 from os import getenv
-import MySQLdb
-from models.base_model import BaseModel, Base
-from models.user import User
-from models.state import State
-from models.city import City
+from datetime import datetime
+from models.base_model import Base
 from models.amenity import Amenity
-from models.place import Place
-from models.review import Review
 from models.engine.db_storage import DBStorage
+from models.state import State
+from models import *
 
 
-@unittest.skipIf(getenv("HBNB_TYPE_STORAGE") != 'db', 'NO DB')
-class TestDBStorage(unittest.TestCase):
-    '''this will test the DBStorage'''
+@unittest.skipIf(os.getenv('HBNB_TYPE_STORAGE', 'fs') != 'db', "db")
+class Test_DBStorage(unittest.TestCase):
+    """
+    Test the file storage class
+    """
+    @classmethod
+    def setUpClass(cls):
+        """create a session"""
+        # close previous connexion to same database
+        storage._DBStorage__session.close()
+        cls.store = DBStorage()
+        test_args = {'updated_at': datetime(2017, 2, 12, 00, 31, 53, 331997),
+                     'id': "0234",
+                     'created_at': datetime(2017, 2, 12, 00, 31, 53, 331900),
+                     'name': 'wifi'}
+        cls.model = Amenity(**test_args)
+        cls.store.reload()
+        cls.test_len = 0
 
     @classmethod
-    def setUpClass(self):
-        """set up for test"""
-        self.User = getenv("HBNB_MYSQL_USER")
-        self.Passwd = getenv("HBNB_MYSQL_PWD")
-        self.Db = getenv("HBNB_MYSQL_DB")
-        self.Host = getenv("HBNB_MYSQL_HOST")
-        self.db = MySQLdb.connect(host=self.Host, user=self.User,
-                                  passwd=self.Passwd, db=self.Db,
-                                  charset="utf8")
-        self.query = self.db.cursor()
-        self.storage = DBStorage()
-        self.storage.reload()
+    def tearDownClass(cls):
+        cls.store._DBStorage__session.close()
+        storage.reload()
 
-    @classmethod
-    def teardown(self):
-        """at the end of the test this will tear it down"""
-        self.query.close()
-        self.db.close()
+    def test_all(self):
+        output = self.store.all('Amenity')
+        self.assertEqual(len(output), self.test_len)
 
-    @unittest.skipIf(getenv("HBNB_TYPE_STORAGE") != 'db', 'NO DB')
-    def test_pep8_DBStorage(self):
-        """Test Pep8"""
-        style = pep8.StyleGuide(quiet=True)
-        p = style.check_files(['models/engine/db_storage.py'])
-        self.assertEqual(p.total_errors, 0, "fix pep8")
+    def test_new(self):
+        # note: we cannot assume order of test is order written
+        self.test_len = len(self.store.all())
+        # self.assertEqual(len(self.store.all()), self.test_len)
+        self.model.save()
+        self.store.reload()
+        self.assertEqual(len(self.store.all()), self.test_len + 1)
+        a = Amenity(name="thing")
+        a.save()
+        self.store.reload()
+        self.assertEqual(len(self.store.all()), self.test_len + 2)
 
-    @unittest.skipIf(getenv("HBNB_TYPE_STORAGE") != 'db', 'NO DB')
-    def test_read_tables(self):
-        """existing tables"""
-        self.query.execute("SHOW TABLES")
-        salida = self.query.fetchall()
-        self.assertEqual(len(salida), 7)
+    def test_save(self):
+        test_len = len(self.store.all())
+        a = Amenity(name="another")
+        a.save()
+        self.store.reload()
+        self.assertEqual(len(self.store.all()), test_len + 1)
+        b = State(name="california")
+        self.assertNotEqual(len(self.store.all()), test_len + 2)
+        b.save()
+        self.store.reload()
+        self.assertEqual(len(self.store.all()), test_len + 2)
 
-    @unittest.skipIf(getenv("HBNB_TYPE_STORAGE") != 'db', 'NO DB')
-    def test_no_element_user(self):
-        """no elem in users"""
-        self.query.execute("SELECT * FROM users")
-        salida = self.query.fetchall()
-        self.assertEqual(len(salida), 0)
-
-    @unittest.skipIf(getenv("HBNB_TYPE_STORAGE") != 'db', 'NO DB')
-    def test_no_element_cities(self):
-        """no elem in cities"""
-        self.query.execute("SELECT * FROM cities")
-        salida = self.query.fetchall()
-        self.assertEqual(len(salida), 0)
-
-    @unittest.skipIf(getenv("HBNB_TYPE_STORAGE") != 'db', 'NO DB')
-    def test_add(self):
-        """Test same size between storage() and existing db"""
-        self.query.execute("SELECT * FROM states")
-        salida = self.query.fetchall()
-        self.assertEqual(len(salida), 0)
-        state = State(name="LUISILLO")
-        state.save()
-        self.db.autocommit(True)
-        self.query.execute("SELECT * FROM states")
-        salida = self.query.fetchall()
-        self.assertEqual(len(salida), 1)
-
+    def test_reload(self):
+        self.model.save()
+        a = Amenity(name="different")
+        a.save()
+        self.store.reload()
+        for value in self.store.all().values():
+            self.assertIsInstance(value.created_at, datetime)
 
 if __name__ == "__main__":
     unittest.main()
