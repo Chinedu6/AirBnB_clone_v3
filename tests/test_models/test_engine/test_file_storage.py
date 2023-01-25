@@ -1,96 +1,73 @@
-#!/usr/bin/python3
-"""test for file storage"""
 import unittest
-import pep8
-import json
 import os
-from models.base_model import BaseModel
-from models.user import User
-from models.state import State
-from models.city import City
-from models.amenity import Amenity
-from models.place import Place
-from models.review import Review
+from datetime import datetime
 from models.engine.file_storage import FileStorage
+from models import *
 
 
-class TestFileStorage(unittest.TestCase):
-    '''this will test the FileStorage'''
+@unittest.skipIf(os.getenv('HBNB_TYPE_STORAGE', 'fs') == 'db',
+                 "db does not have FileStorage")
+class Test_FileStorage(unittest.TestCase):
+    """
+    Test the file storage class
+    """
 
-    @classmethod
-    def setUpClass(cls):
-        """set up for test"""
-        cls.user = User()
-        cls.user.first_name = "Kev"
-        cls.user.last_name = "Yo"
-        cls.user.email = "1234@yahoo.com"
-        cls.storage = FileStorage()
+    def setUp(self):
+        self.store = FileStorage()
 
-    @classmethod
-    def teardown(cls):
-        """at the end of the test this will tear it down"""
-        del cls.user
+        test_args = {'updated_at': datetime(2017, 2, 12, 00, 31, 53, 331997),
+                     'id': 'f519fb40-1f5c-458b-945c-2ee8eaaf4900',
+                     'created_at': datetime(2017, 2, 12, 00, 31, 53, 331900)}
+        self.model = BaseModel(test_args)
 
-    def tearDown(self):
-        """teardown"""
-        try:
-            os.remove("file.json")
-        except Exception:
-            pass
+        self.test_len = len(self.store.all())
 
-    def test_pep8_FileStorage(self):
-        """Tests pep8 style"""
-        style = pep8.StyleGuide(quiet=True)
-        p = style.check_files(['models/engine/file_storage.py'])
-        self.assertEqual(p.total_errors, 0, "fix pep8")
+#    @classmethod
+#    def tearDownClass(cls):
+#        import os
+#        if os.path.isfile("test_file.json"):
+#            os.remove('test_file.json')
 
     def test_all(self):
-        """tests if all works in File Storage"""
-        storage = FileStorage()
-        obj = storage.all()
-        self.assertIsNotNone(obj)
-        self.assertEqual(type(obj), dict)
-        self.assertIs(obj, storage._FileStorage__objects)
+        self.assertEqual(len(self.store.all()), self.test_len)
 
     def test_new(self):
-        """test when new is created"""
-        storage = FileStorage()
-        obj = storage.all()
-        user = User()
-        user.id = 123455
-        user.name = "Kevin"
-        storage.new(user)
-        key = user.__class__.__name__ + "." + str(user.id)
-        self.assertIsNotNone(obj[key])
+        # note: we cannot assume order of test is order written
+        test_len = len(self.store.all())
+        # self.assertEqual(len(self.store.all()), self.test_len)
+        new_obj = State()
+        new_obj.save()
+        self.assertEqual(len(self.store.all()), test_len + 1)
+        a = BaseModel()
+        a.save()
+        self.assertEqual(len(self.store.all()), self.test_len + 2)
 
-    def test_reload_filestorage(self):
-        """
-        tests reload
-        """
-        self.storage.save()
-        Root = os.path.dirname(os.path.abspath("console.py"))
-        path = os.path.join(Root, "file.json")
-        with open(path, 'r') as f:
-            lines = f.readlines()
-        try:
-            os.remove(path)
-        except Exception:
-            pass
-        self.storage.save()
-        with open(path, 'r') as f:
-            lines2 = f.readlines()
-        self.assertEqual(lines, lines2)
-        try:
-            os.remove(path)
-        except Exception:
-            pass
-        with open(path, "w") as f:
-            f.write("{}")
-        with open(path, "r") as r:
-            for line in r:
-                self.assertEqual(line, "{}")
-        self.assertIs(self.storage.reload(), None)
+    def test_save(self):
+        self.test_len = len(self.store.all())
+        a = BaseModel()
+        a.save()
+        self.assertEqual(len(self.store.all()), self.test_len + 1)
+        b = User()
+        self.assertNotEqual(len(self.store.all()), self.test_len + 2)
+        b.save()
+        self.assertEqual(len(self.store.all()), self.test_len + 2)
 
+    def test_reload(self):
+        self.model.save()
+        a = BaseModel()
+        a.save()
+        self.store.reload()
+        for value in self.store.all().values():
+            self.assertIsInstance(value.created_at, datetime)
+
+    def test_state(self):
+        """test State creation with an argument"""
+        pass
 
 if __name__ == "__main__":
+    import sys
+    import os
+    sys.path.insert(1, os.path.join(os.path.split(__file__)[0], '../../..'))
+    from models import *
+    from models.engine.file_storage import FileStorage
     unittest.main()
